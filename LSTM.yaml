@@ -1,0 +1,139 @@
+
+# ############################################################################
+# Model: E2E with attention-based Dialogue System
+# Encoder: LSTM
+# Decoder: LSTM
+# Tokens: Words
+# losses: NLL
+# Training: Context
+##############################################################################
+
+# Seed needs to be set at top of yaml, before objects with parameters are instantiated
+seed: 1337
+__set_seed: !apply:torch.manual_seed [!ref <seed>]
+
+# Folder set up
+data_folder: !PLACEHOLDER
+output_folder: !ref results/LSTM/<seed>
+wer_file: !ref <output_folder>/wer.txt
+save_folder: !ref <output_folder>/save
+train_log: !ref <output_folder>/train_log.txt
+cer_file: !ref <output_folder>/test_cer.txt # file were to store the final character error rate on the test set.
+embeddings_file: !ref <data_folder>/embeddings_weights.pt # File containing glove embeddings (special tokens already included)
+vocab_file: !ref <data_folder>/embeddings_vocab.npy # File containing glove vocabulary (special tokens not yet included)
+
+# Path where data manifest files are stored
+train_annotation: data/train.csv
+valid_annotation: data/valid.csv
+test_annotation: data/test.csv
+
+# The train logger writes training statistics to a file, as well as stdout.
+train_logger: !new:speechbrain.utils.train_logger.FileTrainLogger
+    save_file: !ref <train_log>
+
+# Training parameters
+number_of_epochs: 50
+batch_size: 64
+lr: 0.001
+lr_final: 0.0001
+
+# Dataloader options
+train_dataloader_opts:
+    batch_size: !ref <batch_size>
+
+valid_dataloader_opts:
+    batch_size: !ref <batch_size>
+
+test_dataloader_opts:
+    batch_size: !ref <batch_size>
+
+# Vocabulary size
+voc_size: 400004
+
+# Indexes for begin-of-sentence (bos) 
+# and end-of-sentence (eos)
+bos_index: 400000 # <bos>
+eos_index: 400001 # <eos>
+unk_index: 400002 # <unk>
+pad_index: 400003 # <pad>
+
+# Encoder Parameters
+enc_hidden_size: 300
+enc_num_layers: 2
+
+# Decoder Parameters
+dec_hidden_size: 300
+dec_num_layers: 1   
+attn_dim: 300
+dropout: 0.5
+
+# The first object passed to the Brain class is this "Epoch Counter"
+# which is saved by the Checkpointer so that training can be resumed
+# if it gets interrupted at any point.
+epoch_counter: !new:speechbrain.utils.epoch_loop.EpochCounter
+    limit: !ref <number_of_epochs>
+
+# Encoder
+encoder: !new:speechbrain.nnet.RNN.LSTM
+    input_size: !ref <enc_hidden_size>
+    hidden_size: !ref <enc_hidden_size>
+    num_layers: !ref <enc_num_layers>
+    dropout: !ref <dropout>
+
+# Embeddings
+# Load the torch file holding the GLoVe weights
+weights: !apply:torch.load [!ref <embeddings_file>]
+vocab: !apply:numpy.load [!ref <vocab_file>]
+
+# Load pretrained weights
+embeddings: !apply:torch.nn.Embedding.from_pretrained
+    embeddings: !ref <weights>
+    padding_idx: !ref <pad_index>
+    
+# Attention-based RNN decoder.
+decoder: !new:speechbrain.nnet.RNN.AttentionalRNNDecoder
+    enc_dim: !ref <enc_hidden_size>
+    input_size: !ref <dec_hidden_size>
+    rnn_type: lstm
+    attn_type: content
+    hidden_size: !ref <dec_hidden_size>
+    attn_dim: !ref <attn_dim>
+    num_layers: !ref <dec_num_layers>
+    dropout: !ref <dropout>
+
+# Linear transformation on the top of the decoder.
+seq_lin: !new:speechbrain.nnet.linear.Linear
+    input_size: !ref <dec_hidden_size>
+    n_neurons: !ref <voc_size>
+
+# Final softmax (for log posteriors computation).
+log_softmax: !new:speechbrain.nnet.activations.Softmax
+    apply_log: True
+
+modules:
+    encoder: !ref <encoder>
+    embeddings: !ref <embeddings>
+    decoder: !ref <decoder>
+    seq_lin: !ref <seq_lin>
+
+
+
+
+# This function manages learning rate annealing over the epochs.
+lr_annealing: !new:speechbrain.nnet.schedulers.LinearScheduler
+    initial_value: !ref <lr>
+    final_value: !ref <lr_final>
+    epoch_count: !ref <number_of_epochs>
+
+# This optimizer will be constructed by the Brain class after all parameters
+# are moved to the correct device. Then it will be added to the checkpointer.
+opt_class: !name:torch.optim.Adam
+    lr: !ref <lr>
+   
+# This object is used for saving the state of training both so that it
+# can be resumed if it gets interrupted, and also so that the best checkpoint
+# can be later loaded for evaluation or inference.
+checkpointer: !new:speechbrain.utils.checkpoints.Checkpointer
+    checkpoints_dir: !ref <save_folder>
+    recoverables:
+        counter: !ref <epoch_counter>
