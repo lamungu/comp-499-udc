@@ -1,0 +1,17 @@
+
+output_folder: !PLACEHOLDER
+annotation_read: "context"
+annotation_file: "data/train.csv"
+vocab_size: 32000
+
+tokenizer: !name:speechbrain.tokenizers.SentencePiece.SentencePiece
+   model_dir: !ref <output_folder>
+   vocab_size: !ref <vocab_size>
+   annotation_train: !ref <annotation_file>
+   annotation_read: !ref <annotation_read>
+   annotation_format : "csv"
+   model_type: "bpe"
+   pad_id: 0
+   bos_id: 1
+   eos_id: 2
+   unk_id: 3

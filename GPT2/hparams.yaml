@@ -1,0 +1,124 @@
+
+# ############################################################################
+# Model: E2E with attention-based Dialogue System
+# Transformer: GPT2
+# Tokens: GPT2
+# losses: NLL
+# Training: Context + Response
+##############################################################################
+
+# Seed needs to be set at top of yaml, before objects with parameters are instantiated
+seed: 1337
+__set_seed: !apply:torch.manual_seed [!ref <seed>]
+__hf_seed: !apply:transformers.set_seed [!ref <seed>]
+
+# Folder set up
+data_folder: !PLACEHOLDER
+output_folder: !ref results/GPT2/<seed>
+wer_file: !ref <output_folder>/wer.txt
+eas_file: !ref <output_folder>/eas.txt
+bleu_file: !ref <output_folder>/bleu.txt
+ves_file: !ref <output_folder>/ves.txt
+save_folder: !ref <output_folder>/save
+train_log: !ref <output_folder>/train_log.txt
+gen_file: !ref <output_folder>/test_gen.txt # file were to store the final character error rate on the test set.
+
+# Pretrained Model Parameters
+pretrained_model_name: gpt2
+llm_folder: !ref <save_folder>/gpt_checkpoint
+emb_folder: !ref <save_folder>/gpt_emb_checkpoint
+
+# Path where data manifest files are stored
+train_annotation: data/train_small.csv
+valid_annotation: data/valid_small.csv
+test_annotation: data/test_small.csv
+
+# The train logger writes training statistics to a file, as well as stdout.
+train_logger: !new:speechbrain.utils.train_logger.FileTrainLogger
+    save_file: !ref <train_log>
+
+
+# Special Tokens
+bos_token: "BOS"
+eos_token: "EOS"
+
+context_token: "CTX"
+response_token: "REP"
+
+additional_special_tokens : [
+    !ref <context_token>,
+    !ref <response_token>
+]
+
+special_tokens: [
+    !ref <bos_token>,
+    !ref <eos_token>,
+    !ref <context_token>,
+    !ref <response_token>
+]
+
+attr_to_special_tokens:
+    "bos_token": !ref <bos_token>
+    "eos_token": !ref <eos_token>
+    "additional_special_tokens": !ref <additional_special_tokens>
+
+# Training parameters
+number_of_epochs: 5
+batch_size: 4
+test_batch_size: 4
+lr: 1.97125e-4
+with_eos: True
+
+# Freeze GPT model 
+freeze_llm: False
+
+# Model parameters
+llm_model: !new:modules.hf_llm.HuggingFaceLLM
+    source: !ref <pretrained_model_name>
+    freeze: !ref <freeze_llm>
+    save_path: !ref <llm_folder>
+
+# Dataloader options
+train_dataloader_opts:
+    batch_size: !ref <batch_size>
+
+valid_dataloader_opts:
+    batch_size: !ref <batch_size>
+
+test_dataloader_opts:
+    batch_size: !ref <test_batch_size>
+
+tokenizer: !apply:transformers.GPT2Tokenizer.from_pretrained
+    pretrained_model_name_or_path: !ref <pretrained_model_name>
+
+modules:
+    llm_model: !ref <llm_model>
+
+model: !new:torch.nn.ModuleList
+    - [!ref <llm_model>]
+
+log_softmax: !new:speechbrain.nnet.activations.Softmax
+    apply_log: True
+
+compute_cost: !name:speechbrain.nnet.losses.nll_loss
+
+epoch_counter: !new:speechbrain.utils.epoch_loop.EpochCounter
+    limit: !ref <number_of_epochs>
+
+error_rate_computer: !name:speechbrain.utils.metric_stats.ErrorRateStats
+metric_computer: !name:speechbrain.utils.metric_stats.MetricStats
+bleu_computer: !name:speechbrain.utils.bleu.BLEUStats
+
+lr_annealing: !new:speechbrain.nnet.schedulers.NewBobScheduler
+    initial_value: !ref <lr>
+    improvement_threshold: 0.0025
+    annealing_factor: 0.9
+    patient: 0
+
+opt_class: !name:torch.optim.AdamW
+    lr: !ref <lr>
+   
+checkpointer: !new:speechbrain.utils.checkpoints.Checkpointer
+    checkpoints_dir: !ref <save_folder>
+    recoverables:
+        counter: !ref <epoch_counter>
