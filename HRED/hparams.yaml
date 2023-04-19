@@ -25,9 +25,9 @@ gen_file: !ref <output_folder>/test_gen.txt
 tokenizer_file: /content/results/tokenizer/context/32000_bpe.model
 
 # Path where data manifest files are stored
-train_annotation: data/train_small.csv
-valid_annotation: data/valid_small.csv
-test_annotation: data/test_small.csv
+train_annotation: data/train.csv
+valid_annotation: data/valid.csv
+test_annotation: data/test.csv
 
 # The train logger writes training statistics to a file, as well as stdout.
 train_logger: !new:speechbrain.utils.train_logger.FileTrainLogger

@@ -29,9 +29,9 @@ llm_folder: !ref <save_folder>/gpt_checkpoint
 emb_folder: !ref <save_folder>/gpt_emb_checkpoint
 
 # Path where data manifest files are stored
-train_annotation: data/train_small.csv
-valid_annotation: data/valid_small.csv
-test_annotation: data/test_small.csv
+train_annotation: data/train.csv
+valid_annotation: data/valid.csv
+test_annotation: data/test.csv
 
 # The train logger writes training statistics to a file, as well as stdout.
 train_logger: !new:speechbrain.utils.train_logger.FileTrainLogger
